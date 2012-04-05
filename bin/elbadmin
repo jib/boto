@@ -28,6 +28,8 @@ Commands:
     list|ls                           List all Elastic Load Balancers
     delete    <name>                  Delete ELB <name>
     get       <name>                  Get all instances associated with <name>
+    instances <name>                  Get all instances associated with <name>, in script-friendly output
+    zones     <name>                  List all zones in use by <name>, in script-friendly output
     create    <name>                  Create an ELB
     add       <name> <instance>       Add <instance> in ELB <name>
     remove|rm <name> <instance>       Remove <instance> from ELB <name>
@@ -73,12 +75,43 @@ def get(elb, name):
 
             print
 
-            print "Instances"
-            print "---------"
+            print "Instances         Name (tag)"
+            print "---------         ----------"
             for i in b.instances:
-                print i.id
+                instance = ec2conn.get_all_instances(instance_ids=[i.id])[0].instances[0]
+                if options.zones and instance.placement not in options.zones:
+                    continue
+                nametag = "can't find"
+                if instance and "Name" in instance.tags:
+                        nametag = instance.tags['Name']
+                print "%s        %s" % (i.id, nametag)
 
             print
+
+def instances(elb, name):
+    """Get details about ELB <name>"""
+    elbs = elb.get_all_load_balancers(name)
+    if len(elbs) < 1:
+        print "No load balancer by the name of %s found" % name
+        sys.exit(1)
+    for b in elbs:
+        if name in b.name:
+            for i in b.instances:
+                instance = ec2conn.get_all_instances(instance_ids=[i.id])[0].instances[0]
+                if options.zones and instance.placement not in options.zones:
+                    continue
+                print i.id
+
+def zones(elb, name):
+    """Get details about ELB <name>"""
+    elbs = elb.get_all_load_balancers(name)
+    if len(elbs) < 1:
+        print "No load balancer by the name of %s found" % name
+        sys.exit(1)
+    for b in elbs:
+        if name in b.name:
+            for z in b.availability_zones:
+                print z
 
 def create(elb, name, zones, listeners):
     """Create an ELB named <name>"""
@@ -193,14 +226,19 @@ if __name__ == "__main__":
         sys.exit(1)
 
     elb = boto.connect_elb()
+    ec2conn = boto.connect_ec2()
 
-    print "%s" % (elb.region.endpoint)
+    #print "%s" % (elb.region.endpoint)
 
     command = args[0].lower()
     if command in ("ls", "list"):
         list(elb)
     elif command == "get":
         get(elb, args[1])
+    elif command == "instances":
+        instances(elb, args[1])
+    elif command == "zones":
+        zones(elb, args[1])
     elif command == "create":
         create(elb, args[1], options.zones, options.listeners)
     elif command == "delete":
