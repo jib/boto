@@ -15,7 +15,7 @@
 # THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
 # OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABIL-
 # ITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT
-# SHALL THE AUTHOR BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, 
+# SHALL THE AUTHOR BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
 # WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
 
@@ -121,7 +121,7 @@ def create(elb, name, zones, listeners):
         if l[2]=='HTTPS':
             l_list.append((int(l[0]), int(l[1]), l[2], l[3]))
         else : l_list.append((int(l[0]), int(l[1]), l[2]))
-    
+
     b = elb.create_load_balancer(name, zones, l_list)
     return get(elb, name)
 
@@ -211,12 +211,13 @@ if __name__ == "__main__":
         import readline
     except ImportError:
         pass
-    import boto
+    import boto, boto.ec2, boto.ec2.elb
     import sys
     from optparse import OptionParser
     from boto.mashups.iobject import IObject
     parser = OptionParser(version=VERSION, usage=usage)
     parser.add_option("-z", "--zone", help="Operate on zone", action="append", default=[], dest="zones")
+    parser.add_option("-r", "--region", help="Region to use", action="store", default="us-east1", dest="region" )
     parser.add_option("-l", "--listener", help="Specify Listener in,out,proto", action="append", default=[], dest="listeners")
 
     (options, args) = parser.parse_args()
@@ -225,8 +226,8 @@ if __name__ == "__main__":
         parser.print_help()
         sys.exit(1)
 
-    elb = boto.connect_elb()
-    ec2conn = boto.connect_ec2()
+    ec2conn = boto.ec2.connect_to_region(options.region)
+    elb = boto.ec2.elb.connect_to_region(options.region)
 
     #print "%s" % (elb.region.endpoint)
 
