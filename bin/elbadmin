@@ -39,6 +39,9 @@ Commands:
     rml       <name> <port>           Remove Listener(s) specified by the port on the ELB
 """
 
+# import pprint
+# from pprint import PrettyPrinter
+# PP = PrettyPrinter( indent = 4 )
 
 def list(elb):
     """List all ELBs"""
@@ -141,7 +144,7 @@ def delete(elb, name):
             i.delete()
     print "Load Balancer %s deleted" % name
 
-def add_instance(elb, name, instance):
+def add_instance(elb, ec2conn, name, instance):
     """Add <instance> to ELB <name>"""
     b = elb.get_all_load_balancers(name)
     if len(b) < 1:
@@ -153,7 +156,7 @@ def add_instance(elb, name, instance):
     return get(elb, name)
 
 
-def remove_instance(elb, name, instance):
+def remove_instance(elb, ec2conn, name, instance):
     """Remove instance from elb <name>"""
     b = elb.get_all_load_balancers(name)
     if len(b) < 1:
@@ -208,8 +211,45 @@ def rm_listener(elb, name, ports):
     b.delete_listeners(ports)
     return get(elb, name)
 
+def name_to_instance_id(ec2conn, names):
+    """Map a list of instance Names to their internal IDs"""
 
+    ids = []
+    fmt = "%-12s %-30s"
 
+    ### make sure we dont interleave diagnostic output + formatted output
+    for n in names:
+        i = _name_to_instance(ec2conn, n)
+        if i is not None:
+            ids.append([n, i])
+
+    print fmt % ("Instance id", "Name (tag)")
+    print fmt % ("-----------", "----------")
+
+    for ary in ids:
+        print fmt % (ary[1].id, ary[0])
+
+def _name_to_instance(ec2conn, name):
+    """Translate the Name tag of an instance to it's AWS ID"""
+
+    res = ec2conn.get_all_instances(filters={ 'tag-key': 'Name', 'tag-value': name })
+
+    ### multiple reservations?
+    if len(res) > 1:
+        print "Multiple Reservation IDs found for %s: %s" % (name, ", ".join([str(n) for n in res]))
+        return None
+    elif len(res) < 1:
+        print "No reservation IDs found for: %s" % name
+        return None
+
+    ### in that reservation, multiple instances?
+    nodes = res[0].instances
+
+    if len(nodes) > 1:
+        print "Multiple Instance IDs found for %s: %s" % (name, ", ".join([str(n) for n in nodes]))
+        return None
+    else:
+        return nodes[0]
 
 if __name__ == "__main__":
     try:
@@ -250,9 +290,9 @@ if __name__ == "__main__":
     elif command == "delete":
         delete(elb, args[1])
     elif command in ("add", "put"):
-        add_instance(elb, args[1], args[2])
+        add_instance(elb, ec2conn, args[1], args[2])
     elif command in ("rm", "remove"):
-        remove_instance(elb, args[1], args[2])
+        remove_instance(elb, ec2conn, args[1], args[2])
     elif command in ("en", "enable"):
         enable_zone(elb, args[1], args[2])
     elif command == "disable":
@@ -261,3 +301,5 @@ if __name__ == "__main__":
         add_listener(elb, args[1], options.listeners)
     elif command == "rml":
         rm_listener(elb, args[1], args[2:])
+    elif command == "name2id":
+        name_to_instance_id(ec2conn, args[1:])
