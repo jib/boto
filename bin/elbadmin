@@ -37,11 +37,14 @@ Commands:
     disable   <name> <zone>           Disable Zone <zone> for ELB <name>
     addl      <name>                  Add listeners (specified by -l) to the ELB <name>
     rml       <name> <port>           Remove Listener(s) specified by the port on the ELB
+    name2id   <name> [<name> ..]      Map instance Name (by tag) to AWS instance IDs
 """
 
 # import pprint
 # from pprint import PrettyPrinter
 # PP = PrettyPrinter( indent = 4 )
+
+import re
 
 def list(elb):
     """List all ELBs"""
@@ -152,7 +155,8 @@ def add_instance(elb, ec2conn, name, instance):
         return
     for i in b:
         if name in i.name:
-            i.register_instances([instance])
+            instance_id = _name_to_instance(ec2conn, instance)
+            i.register_instances([instance_id])
     return get(elb, name)
 
 
@@ -164,7 +168,8 @@ def remove_instance(elb, ec2conn, name, instance):
         return
     for i in b:
         if name in i.name:
-            i.deregister_instances([instance])
+            instance_id = _name_to_instance(ec2conn, instance)
+            i.deregister_instances([instance_id])
     return get(elb, name)
 
 def enable_zone(elb, name, zone):
@@ -221,16 +226,20 @@ def name_to_instance_id(ec2conn, names):
     for n in names:
         i = _name_to_instance(ec2conn, n)
         if i is not None:
-            ids.append([n, i])
+            ids.append([i, n])
 
     print fmt % ("Instance id", "Name (tag)")
     print fmt % ("-----------", "----------")
 
     for ary in ids:
-        print fmt % (ary[1].id, ary[0])
+        print fmt % (ary[0], ary[1])
 
 def _name_to_instance(ec2conn, name):
     """Translate the Name tag of an instance to it's AWS ID"""
+
+    ### if the name already matches an instance id, just return that
+    if re.match( "^i-[0-9abcdef]{8}$", name ):
+        return name
 
     res = ec2conn.get_all_instances(filters={ 'tag-key': 'Name', 'tag-value': name })
 
@@ -249,7 +258,7 @@ def _name_to_instance(ec2conn, name):
         print "Multiple Instance IDs found for %s: %s" % (name, ", ".join([str(n) for n in nodes]))
         return None
     else:
-        return nodes[0]
+        return nodes[0].id
 
 if __name__ == "__main__":
     try:
