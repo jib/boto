@@ -39,6 +39,7 @@ Commands:
     rml       <name> <port>           Remove Listener(s) specified by the port on the ELB
 """
 
+
 def list(elb):
     """List all ELBs"""
     print "%-20s %s" %  ("Name", "DNS Name")
@@ -60,9 +61,13 @@ def get(elb, name):
 
             print
 
+
             print "Listeners"
             print "---------"
             print "%-8s %-8s %s" % ("IN", "OUT", "PROTO")
+
+            ### this will not show SSL listener unless this patch is applied:
+            ### https://github.com/boto/boto/pull/676
             for l in b.listeners:
                 print "%-8s %-8s %s" % (l[0], l[1], l[2])
 
