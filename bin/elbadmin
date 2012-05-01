@@ -37,6 +37,7 @@ Commands:
     disable   <name> <zone>           Disable Zone <zone> for ELB <name>
     addl      <name>                  Add listeners (specified by -l) to the ELB <name>
     rml       <name> <port>           Remove Listener(s) specified by the port on the ELB
+    health    <name>                  Describe instance heatlh for this ELB
     name2id   <name> [<name> ..]      Map instance Name (by tag) to AWS instance IDs
 """
 
@@ -234,6 +235,49 @@ def name_to_instance_id(ec2conn, names):
     for ary in ids:
         print fmt % (ary[0], ary[1])
 
+
+def health(elb, name, zones):
+    fmt = "%-12s %-12s %-15s %-30s"
+
+    print fmt % ("Instance id", "Zone", "Status", "Reason")
+    print fmt % ("-----------", "----", "------", "------")
+
+    status = {}
+    for istate in elb.describe_instance_health(name):
+        node = _id_to_instance_object(ec2conn, istate.instance_id)
+        print fmt % (node.id, node.placement, istate.state, istate.reason_code)
+
+        ### make sure we have the key in place
+        if not node.placement in status:
+            status[ node.placement ] = { "FAIL": 0, "OK": 0 }
+
+        if re.match( "OutOfService", istate.state ):
+            status[ node.placement ][ 'FAIL' ] += 1
+        else:
+            status[ node.placement ][ 'OK' ] += 1
+
+    print
+    print
+
+    print fmt % ("Zone", "Sick", "Healthy", "Health Ratio")
+    print fmt % ("----", "----", "-------", "------------")
+
+    for zone in status:
+        fail    = status[zone]['FAIL']
+        ok      = status[zone]['OK']
+        print fmt % ( zone, fail, ok, round(float(ok)/float((fail+ok)), 3) )
+
+
+def _id_to_instance_object(ec2conn, id):
+    res = ec2conn.get_all_instances(instance_ids=[id])
+    node = ___reservation_to_instance_object(ec2conn, res)
+
+    if node:
+        return node
+    else:
+        return None
+
+
 def _name_to_instance(ec2conn, name):
     """Translate the Name tag of an instance to it's AWS ID"""
 
@@ -241,8 +285,16 @@ def _name_to_instance(ec2conn, name):
     if re.match( "^i-[0-9abcdef]{8}$", name ):
         return name
 
-    res = ec2conn.get_all_instances(filters={ 'tag-key': 'Name', 'tag-value': name })
+    res  = ec2conn.get_all_instances(filters={ 'tag-key': 'Name', 'tag-value': name })
+    node = ___reservation_to_instance_object(ec2conn, res)
 
+    if node:
+        return node.id
+    else:
+        return None
+
+
+def ___reservation_to_instance_object(ec2conn, res):
     ### multiple reservations?
     if len(res) > 1:
         print "Multiple Reservation IDs found for %s: %s" % (name, ", ".join([str(n) for n in res]))
@@ -252,13 +304,14 @@ def _name_to_instance(ec2conn, name):
         return None
 
     ### in that reservation, multiple instances?
-    nodes = res[0].instances
+    instances = res[0].instances
 
-    if len(nodes) > 1:
-        print "Multiple Instance IDs found for %s: %s" % (name, ", ".join([str(n) for n in nodes]))
+    if len(instances) > 1:
+        print "Multiple Instance IDs found for %s: %s" % (name, ", ".join([str(n) for n in instances]))
         return None
     else:
-        return nodes[0].id
+        return instances[0]
+
 
 if __name__ == "__main__":
     try:
@@ -312,3 +365,5 @@ if __name__ == "__main__":
         rm_listener(elb, args[1], args[2:])
     elif command == "name2id":
         name_to_instance_id(ec2conn, args[1:])
+    elif command == "health":
+        health(elb, args[1], options.zones)
